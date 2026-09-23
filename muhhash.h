@@ -8,8 +8,8 @@
 using Hasher = std::array<uint8_t, 32>;
 
 Hasher hashingBytes(const std::vector<uint8_t>& data);
-
 Hasher hashingText(const std::string& utf8_text);
+Hasher hashingFile(const std::string& path);
 
 std::string ToHex(const Hasher& d);
 
