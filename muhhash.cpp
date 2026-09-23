@@ -54,6 +54,30 @@ Hasher hashingText(const std::string& utf8_text)
     return hashingBytes(std::vector<uint8_t>(utf8_text.begin(), utf8_text.end()));
 }
 
+Hasher hashingFile(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+    {
+        throw std::runtime_error("Nepavyko atidaryti failo: " + path);
+    }
+
+    std::vector<uint8_t> data;
+    char ch;
+    while (f.get(ch))
+    {
+        data.push_back(static_cast<uint8_t>(ch));
+    }
+
+    if (f.bad())
+    {
+        throw std::runtime_error("Klaida skaitant faila: " + path);
+    }
+
+    return hashingBytes(data);
+}
+
+
 std::string ToHex(const Hasher& d)
 {
     static const char* hx = "0123456789abcdef";
