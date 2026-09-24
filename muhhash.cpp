@@ -33,8 +33,8 @@ Hasher hashingBytes(const std::vector<uint8_t>& data)
 
     for (size_t i = 0; i < data.size(); ++i)
     {
-        int rotate = (i + 1) * data.size() - i + ROT[i];
         int j = i % 8;
+        int rotate = (j + 1) * data.size() - j + ROT[j];
         state[j] += data[i];
         state[j] = rotl(state[j], rotate);
         state[j] ^= state[(j + 3) % 8];
