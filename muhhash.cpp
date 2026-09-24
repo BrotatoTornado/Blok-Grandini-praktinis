@@ -3,10 +3,11 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <iostream>
 
 inline uint32_t rotl(uint32_t x, int r)
 {
-    r % 32;
+    r %= 32;
     if (r == 0)
     {
         return x;
@@ -20,7 +21,7 @@ constexpr uint32_t IV[8] =
     0x1B2C3D4Eu, 0x5F607182u, 0x93A4B5C6u, 0xD7E8F90Au,
 };
 
-const int ROT[8] = { 5, 9, 13, 17, 21, 25, 29, 3 };
+const int ROT[8] = {5, 9, 13, 17, 21, 25, 29, 3};
 
 Hasher hashingBytes(const std::vector<uint8_t>& data)
 {
@@ -32,10 +33,12 @@ Hasher hashingBytes(const std::vector<uint8_t>& data)
 
     for (size_t i = 0; i < data.size(); ++i)
     {
+        int rotate = (i + 1) * data.size() - i + ROT[i];
         int j = i % 8;
         state[j] += data[i];
-        state[j] = rotl(state[j], ROT[j]);
+        state[j] = rotl(state[j], rotate);
         state[j] ^= state[(j + 3) % 8];
+        state[j] *= 0x9E3779B1;
     }
 
     Hasher out;
