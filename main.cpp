@@ -47,8 +47,13 @@ int tekstas()
     return 0;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    if (argc >= 2)
+    {
+        return failas(argv[1]);
+    }
+
     while (true)
     {
         printf("Ivestis ranka ar failas?\n1 - Ranka\n2 - Failas\n");
