@@ -1,13 +1,16 @@
 #include "muhhash.h"
 
-#include <filesystem>
-#include <fstream>
-#include <stdexcept>
-#include <iostream>
+inline const uint32_t IV[8] = {
+    0x1A2B3C4Du, 0x5E6F7081u, 0x92A3B4C5u, 0xD6E7F809u,
+    0x1B2C3D4Eu, 0x5F607182u, 0x93A4B5C6u, 0xD7E8F90Au,
+};
+inline const int ROT[8] = {5, 9, 13, 17, 21, 25, 29, 3};
+inline const uint32_t MUL = 0x9E3779B1u;
+inline const int ROUNDS = 4;
 
-inline uint32_t rotl(uint32_t x, int r)
+uint32_t rotl(uint32_t x, uint32_t r)
 {
-    r %= 32;
+    r &= 31;
     if (r == 0)
     {
         return x;
@@ -15,159 +18,132 @@ inline uint32_t rotl(uint32_t x, int r)
     return (x << r) | (x >> (32 - r));
 }
 
-constexpr uint32_t IV[8] =
+Hasher hashBytes(const std::vector<uint8_t>& data)
 {
-    0x1A2B3C4Du, 0x5E6F7081u, 0x92A3B4C5u, 0xD6E7F809u,
-    0x1B2C3D4Eu, 0x5F607182u, 0x93A4B5C6u, 0xD7E8F90Au,
-};
-
-const int ROT[8] = {5, 9, 13, 17, 21, 25, 29, 3};
-
-Hasher hashingBytes(const std::vector<uint8_t>& data)
-{
-    uint32_t state[8];
-    for (int i = 0; i < 8; ++i)
+    uint64_t n = data.size();
+    uint32_t s[8];
+    for (int j = 0; j < 8; ++j)
     {
-        state[i] = IV[i];
+        s[j] = IV[j];
     }
 
-    for (size_t i = 0; i < data.size(); ++i)
+    for (uint64_t i = 0; i < n; ++i)
     {
         int j = i % 8;
-        int rotate = (j + 1) * data.size() - j + ROT[j];
-        state[j] += data[i];
-        state[j] = rotl(state[j], rotate);
-        state[j] ^= state[(j + 3) % 8];
-        state[j] *= 0x9E3779B1;
+        s[j] += data[i];
+        s[j] = rotl(s[j], (j + 1) * n - j + ROT[j]);
+        s[j] ^= s[(j + 3) % 8];
+        s[j] *= MUL;
+    }
+
+    // 64 bitai į dvi juostas.
+    s[0] += static_cast<uint32_t>(n);
+    s[1] += static_cast<uint32_t>(n >> 32);
+
+    for (int r = 0; r < ROUNDS; ++r)
+    {
+        for (int j = 0; j < 8; ++j)
+        {
+            s[j] += s[(j + 1) % 8];
+            s[j] = rotl(s[j], ROT[j]);
+            s[j] ^= s[(j + 5) % 8];
+            s[j] *= MUL;
+        }
     }
 
     Hasher out;
-    for (int i = 0; i < 8; ++i)
+    for (int j = 0; j < 8; ++j)
     {
-        out[i * 4 + 0] = state[i] >> 24;
-        out[i * 4 + 1] = state[i] >> 16;
-        out[i * 4 + 2] = state[i] >> 8;
-        out[i * 4 + 3] = state[i];
+        for (int b = 0; b < 4; ++b)
+        {
+            out[j * 4 + b] = s[j] >> (24 - 8 * b);
+        }
     }
     return out;
 }
 
-Hasher hashingText(const std::string& utf8_text)
+std::string toHex(const Hasher& h)
 {
-    return hashingBytes(std::vector<uint8_t>(utf8_text.begin(), utf8_text.end()));
-}
-
-Hasher hashingFile(const std::string& path)
-{
-    std::ifstream f(path, std::ios::binary);
-    if (!f)
-    {
-        throw std::runtime_error("Nepavyko atidaryti failo: " + path);
-    }
-
-    std::vector<uint8_t> data;
-    char ch;
-    while (f.get(ch))
-    {
-        data.push_back(static_cast<uint8_t>(ch));
-    }
-
-    if (f.bad())
-    {
-        throw std::runtime_error("Klaida skaitant faila: " + path);
-    }
-
-    return hashingBytes(data);
-}
-
-
-std::string ToHex(const Hasher& d)
-{
-    static const char* hx = "0123456789abcdef";
+    const char* digits = "0123456789abcdef";
     std::string s;
-    s.reserve(32 * 2);
-    for (uint8_t b : d)
+    for (uint8_t b : h)
     {
-        s.push_back(hx[b >> 4]);
-        s.push_back(hx[b & 0xF]);
+        s += digits[b >> 4];
+        s += digits[b & 0xF];
     }
     return s;
 }
 
-bool isItUTF(const std::string& s)
+// ne įprastą failą laiko klaida.
+std::vector<uint8_t> readFile(const std::string& path)
+{
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec))
+    {
+        throw std::runtime_error("Nera iprasto failo: " + path);
+    }
+    std::ifstream f(path, std::ios::binary);
+    std::vector<uint8_t> data(std::filesystem::file_size(path));
+    f.read(reinterpret_cast<char*>(data.data()), data.size());
+    if (!f)
+    {
+        throw std::runtime_error("Klaida skaitant faila: " + path);
+    }
+    return data;
+}
+
+
+bool isUtf8(const std::string& s)
 {
     size_t i = 0;
-    size_t n = s.size();
-
-    while (i < n)
+    while (i < s.size())
     {
-        uint8_t b0 = s[i];
+        uint8_t b = s[i];
+        int extra = 0;
+        uint32_t code = b;
+        uint32_t minCode = 0;
 
-        if (b0 <= 0x7F)
+        if (b >= 0xF0 && b < 0xF8)
         {
-            i += 1;
-            continue;
+            extra = 3;
+            code = b & 0x07;
+            minCode = 0x10000;
         }
-
-        size_t extra_bytes = 0;
-        uint32_t codepoint = 0;
-        uint32_t min_codepoint = 0;
-
-        if ((b0 & 0xE0) == 0xC0)
+        else if (b >= 0xE0 && b < 0xF0)
         {
-            extra_bytes = 1;
-            codepoint = b0 & 0x1F;
-            min_codepoint = 0x80;
+            extra = 2;
+            code = b & 0x0F;
+            minCode = 0x800;
         }
-        else if ((b0 & 0xF0) == 0xE0)
+        else if (b >= 0xC0 && b < 0xE0)
         {
-            extra_bytes = 2;
-            codepoint = b0 & 0x0F;
-            min_codepoint = 0x800;
+            extra = 1;
+            code = b & 0x1F;
+            minCode = 0x80;
         }
-        else if ((b0 & 0xF8) == 0xF0)
-        {
-            extra_bytes = 3;
-            codepoint = b0 & 0x07;
-            min_codepoint = 0x10000;
-        }
-        else
+        else if (b >= 0x80)
         {
             return false;
         }
 
-        if (i + extra_bytes >= n)
+        if (i + extra >= s.size())
         {
             return false;
         }
-
-        for (size_t k = 1; k <= extra_bytes; ++k)
+        for (int k = 1; k <= extra; ++k)
         {
-            uint8_t bk = s[i + k];
-            if ((bk & 0xC0) != 0x80)
+            uint8_t c = s[i + k];
+            if ((c & 0xC0) != 0x80)
             {
                 return false;
             }
-            codepoint = (codepoint << 6) | (bk & 0x3F);
+            code = (code << 6) | (c & 0x3F);
         }
-
-        if (codepoint < min_codepoint)
+        if (code < minCode || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF))
         {
             return false;
         }
-
-        if (codepoint > 0x10FFFF)
-        {
-            return false;
-        }
-
-        if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
-        {
-            return false;
-        }
-
-        i += extra_bytes + 1;
+        i += extra + 1;
     }
-
     return true;
 }
