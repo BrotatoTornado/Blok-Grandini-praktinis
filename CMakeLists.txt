@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(muhhash CXX)
+# Katalogai tests/ ir experiments/ susidurtų su programų vardais: statyk tik į build/.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "Naudok: cmake -S . -B build && cmake --build build")
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT CMAKE_BUILD_TYPE)
