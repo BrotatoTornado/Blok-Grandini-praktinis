@@ -1,83 +1,102 @@
-#include <cstdio>
+// Naudojimas: muhhash [-q] [--text | <failas>]   (be argumentų – meniu)
+#include <cstring>
 #include <iostream>
-#include <string>
-#include <stdexcept>
 
 #include "muhhash.h"
 
-int failas(const std::string& path)
-{
-    printf("FAILO MAISA\n");
+static bool quiet = false; // -q: informacija į stderr, stdout tik maiša
 
+static void info(const std::string& msg)
+{
+    (quiet ? std::cerr : std::cout) << msg;
+}
+
+static int hashData(const std::vector<uint8_t>& data)
+{
+    info("Baitu: " + std::to_string(data.size()) + "\n");
+    std::cout << toHex(hashBytes(data)) << "\n";
+    return 0;
+}
+
+static int hashFile(const std::string& path)
+{
     try
     {
-        Hasher d = hashingFile(path);
-        printf("%s\n", ToHex(d).c_str());
-        return 0;
+        return hashData(readFile(path));
     }
     catch (const std::exception& e)
     {
-        fprintf(stderr, "Blogai: nepavyko perskaityti failo. %s\n", e.what());
+        std::cerr << "Blogai: " << e.what() << "\n";
         return 1;
     }
 }
 
-
-int tekstas()
+static int hashText()
 {
-    printf("Ivesk teksta ir paspausk Enter:\n");
-
+    info("Ivesk teksta ir paspausk Enter:\n");
     std::string line;
-    if (!std::getline(std::cin, line))
+    std::getline(std::cin, line);
+    if (!isUtf8(line))
     {
-        printf("(0 baitu)\n");
-        line.clear();
-    }
-
-    printf("Baitu: %zu\n\n", line.size());
-
-    if (!isItUTF(line))
-    {
-        fprintf(stderr, "Blogai: ne UTF-8 ivestis\n");
+        std::cerr << "Blogai: ne UTF-8 ivestis\n";
         return 1;
     }
-
-    Hasher d = hashingText(line);
-    printf("%s\n", ToHex(d).c_str());
-    return 0;
+    return hashData(std::vector<uint8_t>(line.begin(), line.end()));
 }
 
 int main(int argc, char* argv[])
 {
-    if (argc >= 2)
+    bool text = false;
+    std::string path;
+
+    for (int i = 1; i < argc; ++i)
     {
-        return failas(argv[1]);
+        if (!strcmp(argv[i], "-q"))
+        {
+            quiet = true;
+        }
+        else if (!strcmp(argv[i], "--text"))
+        {
+            text = true;
+        }
+        else
+        {
+            path = argv[i];
+        }
+    }
+
+    if (text)
+    {
+        return hashText();
+    }
+    if (!path.empty())
+    {
+        return hashFile(path);
     }
 
     while (true)
     {
-        printf("Ivestis ranka ar failas?\n1 - Ranka\n2 - Failas\n");
-
-        int c = 0;
-        std::cin >> c;
+        std::cout << "Ivestis ranka ar failas?\n1 - Ranka\n2 - Failas\n";
+        int choice = 0;
+        std::cin >> choice;
         std::cin.ignore();
 
-        if (c == 1)
+        if (choice == 1)
         {
-            return tekstas();
+            return hashText();
         }
-        else if (c == 2)
+        if (choice == 2)
         {
-            printf("Failo kelias: ");
-            std::string kelias;
-            std::getline(std::cin, kelias);
-            return failas(kelias);
+            std::cout << "Failo kelias: ";
+            std::getline(std::cin, path);
+            return hashFile(path);
         }
-        else
+        if (std::cin.eof())
         {
-            printf("Blogas pasirinkimas, bandyk dar karta.\n\n");
-            std::cin.clear();
-            std::cin.ignore(1000, '\n');
+            return 1;
         }
+        std::cout << "Blogas pasirinkimas, bandyk dar karta.\n\n";
+        std::cin.clear();
+        std::cin.ignore(1000, '\n');
     }
 }

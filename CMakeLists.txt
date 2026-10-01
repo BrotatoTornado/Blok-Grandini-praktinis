@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.16)
+project(muhhash CXX)
+# Katalogai tests/ ir experiments/ susidurtų su programų vardais: statyk tik į build/.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "Naudok: cmake -S . -B build && cmake --build build")
+endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+enable_testing()
+
+add_library(muh muhhash.cpp versions/algo.cpp versions/v0_1/muhhash_v0_1.cpp)
+add_executable(muhhash main.cpp)
+target_link_libraries(muhhash muh)
+
+add_executable(tests tests/test_golden.cpp)
+target_link_libraries(tests muh)
+add_test(NAME golden_v0_1 COMMAND tests ${CMAKE_SOURCE_DIR}/tests/golden_v0_1.txt v0.1)
+add_test(NAME golden_v0_2 COMMAND tests ${CMAKE_SOURCE_DIR}/tests/golden_v0_2.txt v0.2)
+
+add_executable(test_rotate tests/test_rotate.cpp)
+target_link_libraries(test_rotate muh)
+add_test(NAME rotate_v0_2_matches_v0_1 COMMAND test_rotate)
+
+file(GLOB EXP_SRC experiments/*.cpp)
+add_executable(experiments ${EXP_SRC})
+target_link_libraries(experiments muh)
